@@ -111,7 +111,7 @@ def get_currency_text():
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🌤 Ob-havo"), KeyboardButton(text="💵 Valyuta")],
-        [KeyboardButton(text="🔔 Valyuta Obunasi"), KeyboardButton(text="🔔 Ob-havo Obunasi")],
+        [KeyboardButton(text="🔔 Valyutani kunlik bilish"), KeyboardButton(text="🔔 Ob-havoni har kuni bilish")],
         [KeyboardButton(text="🔄 Ayirboshlash")]
     ], resize_keyboard=True
 )
@@ -193,10 +193,10 @@ async def toggle_currency_sub(message: Message):
     user_id = message.from_user.id
     if user_id in subscriptions["currency"]:
         subscriptions["currency"].remove(user_id)
-        msg = "❌ Valyuta obunasi bekor qilindi."
+        msg = "❌ Valyuta kursi bekor qilindi."
     else:
         subscriptions["currency"].append(user_id)
-        msg = "✅ Valyuta kursiga obuna bo'ldingiz. Har kuni 07:00 da yuboriladi."
+        msg = "✅ Valyuta kursi yoqildi. Har kuni 07:00 da yuboriladi."
     
     save_subs(subscriptions)
     await message.answer(msg, reply_markup=main_kb)
@@ -214,7 +214,7 @@ async def location_handler(message: Message):
         subscriptions["weather"][str(user_id)] = {"lat": lat, "lon": lon}
         save_subs(subscriptions)
         await bot.delete_message(message.chat.id, msg.message_id)
-        await message.answer("✅ Ob-havo obunasi faollashdi! Har kuni 07:00 da yuboriladi.", reply_markup=main_kb)
+        await message.answer("✅ Ob-havo  faollashdi! Har kuni 07:00 da yuboriladi.", reply_markup=main_kb)
         user_states.pop(user_id, None)
     
     # Bir martalik ko'rish uchun
@@ -237,7 +237,7 @@ async def calc_start(message: Message):
     text = message.text
     user_id = message.from_user.id
     
-    if text == "🔙 Bosh menyu":
+    elif text == "🔙 Bosh menyu":
         user_states.pop(user_id, None)
         return await start_handler(message)
     elif text == "🔙 Bekor qilish":
@@ -254,9 +254,9 @@ async def text_router(message: Message):
     user_id = message.from_user.id
 
     if text == "🌤 Ob-havo": return await weather_ask(message, is_subscription=False)
-    if text == "🔔 Ob-havo Obunasi": return await weather_ask(message, is_subscription=True)
+    if text == "🔔 Ob-havo avto yoqish/o'chirsh ": return await weather_ask(message, is_subscription=True)
     if text == "💵 Valyuta": return await currency_rates(message)
-    if text == "🔔 Valyuta Obunasi": return await toggle_currency_sub(message)
+    if text == "🔔 Valyuta avto yoqish/o'chirish ": return await toggle_currency_sub(message)
     if text == "🔄 Ayirboshlash": 
         await message.answer("Yo'nalishni tanlang:", reply_markup=calc_kb)
         return
@@ -315,3 +315,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+
