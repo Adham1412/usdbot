@@ -14,7 +14,7 @@ API_URL = "https://open.er-api.com/v6/latest/USD"
 
 # Tokenni Render "Environment Variables" bo'limidan oladi.
 # Agar topilmasa, kod ichidagi (test uchun) ishlatiladi.
-TELEGRAM_TOKEN = os.getenv("BOT_TOKEN", "8290258696:AAH2P4fjPS00ZRY9G2ufT-x0yViQ_1tv6D4")
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN", "")
 
 # Locale: minglik bo‘laklarga bo‘lish uchun
 try:
@@ -242,4 +242,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
+
         logger.info("Bot to'xtatildi")
