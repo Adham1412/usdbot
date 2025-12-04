@@ -237,35 +237,54 @@ async def calc_start(message: Message):
     text = message.text
     user_id = message.from_user.id
     
-    elif text == "🔙 Bosh menyu":
-        user_states.pop(user_id, None)
-        return await start_handler(message)
-    elif text == "🔙 Bekor qilish":
-        user_states.pop(user_id, None)
-        return await start_handler(message)
+    # Agar bu funksiyaga noto'g'ri kirib qolsa, routerga o'tkazamiz
+    if "➡️" not in text:
+        return await text_router(message)
 
     if "USD ➡️ UZS" in text: user_states[user_id] = "usd_to_uzs"
     elif "UZS ➡️ USD" in text: user_states[user_id] = "uzs_to_usd"
     
-    await message.answer("Summani kiriting:", reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Bekor qilish")]], resize_keyboard=True))
-
+    # "Bosh menyu" tugmasini chiqaramiz
+    await message.answer(
+        "Summani kiriting:", 
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🔙 Bosh menyu")]], 
+            resize_keyboard=True
+        )
+    )
 async def text_router(message: Message):
     text = message.text
     user_id = message.from_user.id
 
-    if text == "🌤 Ob-havo": return await weather_ask(message, is_subscription=False)
-    if text == "🔔 Ob-havo avto yoqish/o'chirsh ": return await weather_ask(message, is_subscription=True)
-    if text == "💵 Valyuta": return await currency_rates(message)
-    if text == "🔔 Valyuta avto yoqish/o'chirish ": return await toggle_currency_sub(message)
+    # --- TUGMALAR VA NAVIGATSIYA ---
+    if text == "🌤 Ob-havo": 
+        return await weather_ask(message, is_subscription=False)
+    
+    # MATN TO'G'IRLANDI (Klaviaturadagi bilan bir xil bo'lishi kerak)
+    if text == "🔔 Ob-havoni har kuni bilish": 
+        return await weather_ask(message, is_subscription=True)
+    
+    if text == "💵 Valyuta": 
+        return await currency_rates(message)
+    
+    # MATN TO'G'IRLANDI
+    if text == "🔔 Valyutani kunlik bilish": 
+        return await toggle_currency_sub(message)
+    
     if text == "🔄 Ayirboshlash": 
         await message.answer("Yo'nalishni tanlang:", reply_markup=calc_kb)
         return
-    if text == "🔙 Bekor qilish": return await start_handler(message)
+    
+    # BOSH MENYU VA BEKOR QILISH LOGIKASI SHU YERGA QO'SHILDI
+    if text == "🔙 Bekor qilish" or text == "🔙 Bosh menyu":
+        user_states.pop(user_id, None) # Eski holatni o'chiramiz
+        return await start_handler(message)
 
-    # Kalkulyator
+    # --- KALKULYATOR MANTIQI ---
     state = user_states.get(user_id)
     if state in ["usd_to_uzs", "uzs_to_usd"]:
         try:
+            # Vergulni nuqtaga almashtiramiz (kalkulyator xato bermasligi uchun)
             amount = float(text.replace(",", "."))
             if not exchange_rates["USD"]: get_rates()
             
@@ -276,9 +295,11 @@ async def text_router(message: Message):
             else:
                 res = amount / rate
                 t = f"🇺🇿 {amount:,.2f} UZS = 🇺🇸 {res:,.2f} USD"
-            await message.answer(t, reply_markup=calc_kb)
-        except:
-            await message.answer("⚠️ Faqat raqam kiriting.")
+            
+            # Natijadan keyin yana hisoblashda qolish uchun
+            await message.answer(t, reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Bosh menyu")]], resize_keyboard=True))
+        except ValueError:
+            await message.answer("⚠️ Iltimos, faqat raqam kiriting (Masalan: 100 yoki 10.5)")
 
 # --- WEB SERVER ---
 async def health_check(request): return web.Response(text="Bot is running")
@@ -315,4 +336,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+
 
