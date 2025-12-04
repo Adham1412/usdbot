@@ -16,7 +16,7 @@ TELEGRAM_TOKEN = os.getenv("BOT_TOKEN", "SIZNING_TELEGRAM_BOT_TOKENINGIZ")
 
 # 2. OpenWeatherMap API Kaliti (Token)
 # https://home.openweathermap.org/api_keys saytidan olasiz
-WEATHER_TOKEN = os.getenv("WEATHER_TOKEN", "SIZNING_OPENWEATHER_TOKENINGIZ")
+WEATHER_TOKEN = os.getenv("WEATHER_TOKEN", "933114d1b96dce040e4af37f330744c0")
 
 # Valyuta API (Bepul)
 CURRENCY_API_URL = "https://open.er-api.com/v6/latest/UZS"
@@ -289,3 +289,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+
