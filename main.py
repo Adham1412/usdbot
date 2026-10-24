@@ -13,7 +13,7 @@ from aiogram.types import ContentType, KeyboardButton, Message, ReplyKeyboardMar
 
 # --- SOZLAMALAR ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEATHER_TOKEN = os.getenv("WEATHER_TOKEN", "933114d1b96dce040e4af37f330744c0")
+WEATHER_TOKEN = os.getenv("WEATHER_TOKEN")
 CURRENCY_API_URL = "https://open.er-api.com/v6/latest/UZS"
 DAILY_SEND_HOUR = 7
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +29,7 @@ user_states = {}
 
 
 # Obunachilar bazasi (Fayldan o'qish va yozish)
-def ensure_subscriptions_shape(data):
+def normalize_subscriptions(data):
     if not isinstance(data, dict):
         return {"currency": [], "weather": {}}
 
@@ -47,16 +47,17 @@ def ensure_subscriptions_shape(data):
 def load_subs():
     if not os.path.exists(SUBS_FILE):
         return {"currency": [], "weather": {}}
+
     try:
         with open(SUBS_FILE, "r", encoding="utf-8") as f:
-            return ensure_subscriptions_shape(json.load(f))
+            return normalize_subscriptions(json.load(f))
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         logger.warning("subscribers.json o'qishda xatolik, default ma'lumotlar ishlatilmoqda")
         return {"currency": [], "weather": {}}
 
 
 def save_subs(data):
-    payload = ensure_subscriptions_shape(data)
+    payload = normalize_subscriptions(data)
     try:
         with open(SUBS_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -64,7 +65,6 @@ def save_subs(data):
         logger.error(f"subscribers.json yozishda xatolik: {e}")
 
 
-# Dastlabki yuklash
 subscriptions = load_subs()
 
 # --- TARJIMALAR ---
@@ -94,12 +94,14 @@ def get_rates():
         response.raise_for_status()
         payload = response.json()
         rates = payload.get("rates", {})
+
         if isinstance(rates, dict):
-            if "USD" in rates and rates["USD"]:
-                exchange_rates["USD"] = 1 / float(rates["USD"])
-            if "EUR" in rates and rates["EUR"]:
-                exchange_rates["EUR"] = 1 / float(rates["EUR"])
-        return True
+            if "USD" in rates and rates["USD"] not in (None, "", 0):
+                exchange_rates["USD"] = 1.0 / float(rates["USD"])
+            if "EUR" in rates and rates["EUR"] not in (None, "", 0):
+                exchange_rates["EUR"] = 1.0 / float(rates["EUR"])
+
+        return exchange_rates["USD"] is not None or exchange_rates["EUR"] is not None
     except Exception as e:
         logger.error(f"Valyuta xatosi: {e}")
         return False
@@ -121,8 +123,13 @@ def get_forecast(lat, lon):
         logger.warning(f"Koordinatalar diapazondan tashqarida: lat={lat}, lon={lon}")
         return None
 
+    if not WEATHER_TOKEN:
+        logger.warning("WEATHER_TOKEN bo'sh, ob-havo ma'lumoti olish mumkin emas")
+        return None
+
     url = "https://api.openweathermap.org/data/2.5/forecast"
     params = {"lat": lat, "lon": lon, "appid": WEATHER_TOKEN, "units": "metric", "lang": "ru"}
+
     try:
         response = requests.get(url, params=params, timeout=10)
         if response.status_code != 200:
@@ -238,7 +245,7 @@ location_kb = ReplyKeyboardMarkup(
 
 calc_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🇺🇸 USD ➡️ UZS"), KeyboardButton(text="🇺🇿 UZS ➡️ USD")],
+        [KeyboardButton(text="🇺🇸 USD ➡️ UZS"), KeyboardButton(text="🇺🇿 UZS ���️ USD")],
         [KeyboardButton(text="🔙 Bosh menyu")],
     ],
     resize_keyboard=True,
@@ -249,6 +256,7 @@ calc_kb = ReplyKeyboardMarkup(
 async def daily_scheduler(bot: Bot):
     while True:
         now = datetime.now()
+
         if now.hour == DAILY_SEND_HOUR and now.minute == 0:
             currency_text = get_currency_text()
             if currency_text:
@@ -271,6 +279,7 @@ async def daily_scheduler(bot: Bot):
                 try:
                     if not isinstance(coords, dict):
                         raise ValueError("Bad coordinates")
+
                     w_data = get_forecast(coords.get("lat"), coords.get("lon"))
                     if w_data:
                         text = format_weather_report(w_data, is_daily=True)
@@ -362,10 +371,7 @@ async def currency_rates(message: Message):
 
 
 async def calc_start(message: Message):
-    if not message.text:
-        return await text_router(message)
-
-    text = message.text
+    text = message.text or ""
     user_id = message.from_user.id
 
     if "➡️" not in text:
@@ -389,10 +395,10 @@ async def calc_start(message: Message):
 
 
 async def text_router(message: Message):
-    if not message.text:
+    text = (message.text or "").strip()
+    if not text:
         return
 
-    text = message.text
     user_id = message.from_user.id
 
     if text == "🌤 Ob-havo":
@@ -465,9 +471,9 @@ async def start_web_server():
 
 # --- MAIN ---
 if not BOT_TOKEN:
-    logger.warning("BOT_TOKEN topilmadi. Botni ishga tushirish uchun BOT_TOKEN muhit o'zgaruvchisini belgilang.")
+    raise RuntimeError("BOT_TOKEN muhit o'zgaruvchisi topilmadi. Iltimos, .env yoki server sozlamalariga BOT_TOKEN qo'shing.")
 
-bot = Bot(token=BOT_TOKEN or "")
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 dp.message.register(start_handler, Command("start"))
