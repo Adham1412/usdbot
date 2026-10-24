@@ -9,7 +9,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ContentType
 from aiohttp import web
-  
+   
 # --- SOZLAMALAR ---
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN", "SIZNING_TELEGRAM_BOT_TOKENINGIZ")
 WEATHER_TOKEN = os.getenv("WEATHER_TOKEN", "933114d1b96dce040e4af37f330744c0")
@@ -36,6 +36,7 @@ def load_subs():
             return json.load(f)
     except:
         return {"currency": [], "weather": {}}
+
 
 def save_subs(data):
     with open(SUBS_FILE, "w") as f:
@@ -65,40 +66,79 @@ def get_rates():
         logger.error(f"Valyuta xatosi: {e}")
         return False
 
+
 def get_forecast(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/forecast"
     params = {"lat": lat, "lon": lon, "appid": WEATHER_TOKEN, "units": "metric", "lang": "ru"}
     try:
         response = requests.get(url, params=params, timeout=10)
-        return response.json() if response.status_code == 200 else None
-    except: return None
+        payload = response.json() if response.headers.get("Content-Type", "").startswith("application/json") else {}
+
+        if response.status_code != 200 or not isinstance(payload, dict):
+            logger.warning(f"OpenWeather API xatosi: status={response.status_code}, body={payload}")
+            return None
+
+        if payload.get("cod") not in (None, 200, "200"):
+            logger.warning(f"OpenWeather API xatosi: {payload.get('message', 'unknown error')}")
+            return None
+
+        if not payload.get("list"):
+            logger.warning(f"OpenWeather javobida forecast list yo'q: {payload}")
+            return None
+
+        return payload
+    except Exception as e:
+        logger.exception(f"Ob-havo so'rovi xatosi: {e}")
+        return None
+
 
 def format_weather_report(data, is_daily=False):
-    city = data["city"]["name"]
-    # Agar kunlik avto-xabar bo'lsa, faqat bugungi kunni olamiz
-    list_data = data["list"][:8] if is_daily else data["list"]
-    
+    if not isinstance(data, dict):
+        return "⚠️ Ob-havo ma'lumotlari topilmadi."
+
+    items = data.get("list") or []
+    if not items:
+        return "⚠️ Ob-havo ma'lumotlari topilmadi."
+
+    city = (data.get("city") or {}).get("name") or data.get("name") or "Hudud"
     report = f"📍 <b>{city}</b> ob-havosi:\n\n"
-    processed_days = []
-    
-    for item in list_data:
-        dt_txt = item["dt_txt"]
-        date_obj = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")
-        day_str = date_obj.strftime("%d.%m")
-        
-        # Kunduzgi vaqtni olishga harakat qilamiz (11:00-14:00) yoki birinchi kelganini
-        hour = date_obj.hour
-        if day_str not in processed_days:
-            if is_daily or (11 <= hour <= 14):
-                temp = round(item["main"]["temp"])
-                desc = item["weather"][0]["main"]
-                uzb_desc = weather_translations.get(desc, desc)
-                temp_sign = "+" if temp > 0 else ""
-                
-                report += f"📅 <b>{day_str}</b> | {uzb_desc}\n🌡 <b>{temp_sign}{temp}°C</b> | 💨 {item['wind']['speed']} m/s\n\n"
-                processed_days.append(day_str)
-                if len(processed_days) >= (1 if is_daily else 5): break
+    processed_days = set()
+    visible_items = items[:8] if is_daily else items
+
+    for item in visible_items:
+        try:
+            dt_txt = item.get("dt_txt")
+            if not dt_txt:
+                continue
+            date_obj = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")
+            day_str = date_obj.strftime("%d.%m")
+            hour = date_obj.hour
+
+            # Kunduzgi vaqtni (11:00-14:00) yoki birinchi ma'lumotdan olish
+            if day_str in processed_days:
+                continue
+            if not is_daily and not (11 <= hour <= 14):
+                continue
+
+            temp = round(item.get("main", {}).get("temp", 0))
+            desc = (item.get("weather") or [{}])[0].get("main", "Unknown")
+            uzb_desc = weather_translations.get(desc, desc)
+            wind_speed = (item.get("wind") or {}).get("speed", 0)
+            temp_sign = "+" if temp > 0 else ""
+
+            report += f"📅 <b>{day_str}</b> | {uzb_desc}\n🌡 <b>{temp_sign}{temp}°C</b> | 💨 {wind_speed} m/s\n\n"
+            processed_days.add(day_str)
+
+            if len(processed_days) >= (1 if is_daily else 5):
+                break
+        except (TypeError, ValueError, KeyError):
+            continue
+
+    if report == f"📍 <b>{city}</b> ob-havosi:\n\n":
+        return "⚠️ Ob-havo ma'lumotlari to'liq kelmadi."
+
     return report
+
 
 def get_currency_text():
     get_rates()
@@ -224,7 +264,7 @@ async def location_handler(message: Message):
         if weather_data:
             await message.answer(format_weather_report(weather_data), reply_markup=main_kb, parse_mode="HTML")
         else:
-            await message.answer("Xatolik yuz berdi.", reply_markup=main_kb)
+            await message.answer("⚠️ Ob-havo ma'lumotini olishda xatolik yuz berdi. Qayta urinib ko'ring.", reply_markup=main_kb)
         # Stateni tozalash
         if user_id in user_states and user_states[user_id] == "get_weather_once":
             user_states.pop(user_id, None)
